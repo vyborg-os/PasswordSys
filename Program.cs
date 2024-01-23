@@ -29,6 +29,7 @@ namespace PasswordManager
             {
                 Console.WriteLine("1. Login");
                 Console.WriteLine("2. Register");
+                Console.WriteLine("3. Admin-End");
                 Console.WriteLine("0. Exit");
 
                 string choice = Console.ReadLine();
@@ -49,6 +50,9 @@ namespace PasswordManager
                         break;
                     case "2":
                         Register();
+                        break;
+                    case "3":
+                        AdminEnd();
                         break;
                     case "0":
                         Environment.Exit(0);
@@ -487,6 +491,229 @@ private static void ViewPasswords()
                 Console.WriteLine($"Error decrypting password. Invalid Base64 string detected in the encrypted values.");
             }
         }
+    }
+}
+
+private static void AdminEnd()
+{
+    LoadOrCreateUsersFile();
+
+    while (true)
+    {
+        Console.WriteLine("*** Admin End ***");
+        Console.WriteLine("1. Login");
+        Console.WriteLine("2. Register");
+        Console.WriteLine("3. Return to Menu");
+        Console.WriteLine("0. Exit");
+
+        string choice = Console.ReadLine();
+
+        switch (choice)
+        {
+            case "1":
+                currentUser = Login();
+                if (currentUser != null)
+                {
+                    if (currentUser == "admin")
+                    {
+                        AdminOperations(); // Admin login
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Welcome, {currentUser}!");
+                        PasswordManagerOperations();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Login failed. Please try again.");
+                }
+                break;
+            case "2":
+                Register();
+                break;
+            case "3":
+                UserManagement();
+                break;
+            case "0":
+                Environment.Exit(0);
+                break;
+            default:
+                Console.WriteLine("Invalid choice. Please try again.");
+                break;
+        }
+    }
+}
+
+private static void AdminOperations()
+{
+    while (true)
+    {
+        Console.WriteLine("1. View All Passwords");
+        Console.WriteLine("2. Edit Password for a User");
+        Console.WriteLine("3. Delete Password for a User");
+        Console.WriteLine("4. View Decrypted Information");
+        Console.WriteLine("0. Logout");
+
+        string choice = Console.ReadLine();
+
+        switch (choice)
+        {
+            case "1":
+                ViewAllPasswords();
+                break;
+            case "2":
+                EditPasswordForUser();
+                break;
+            case "3":
+                DeletePasswordForUser();
+                break;
+            case "4":
+                ViewDecryptedInfo();
+                break;
+            case "0":
+                currentUser = null;
+                Console.WriteLine("Logged out successfully.");
+                UserManagement();
+                break;
+            default:
+                Console.WriteLine("Invalid choice. Please try again.");
+                break;
+        }
+    }
+}
+
+private static void ViewAllPasswords()
+{
+    string[] lines = File.ReadAllLines(passwordManagerFile);
+    foreach (var line in lines)
+    {
+        var parts = line.Split(',');
+        if (parts.Length == 7)
+        {
+            string decryptedTypename = Decrypt(parts[2]);
+            string decryptedPassword = Decrypt(parts[3]);
+            string decryptedDetails = Decrypt(parts[4]);
+
+            Console.WriteLine($"User: {parts[0]}, Type: {parts[1]}, Name: {decryptedTypename}, Password: ****, Details: ****, Created: {parts[5]}, Last Updated: {parts[6]}");
+        }
+    }
+}
+private static void ViewDecryptedInfo()
+{
+    string[] lines = File.ReadAllLines(passwordManagerFile);
+    foreach (var line in lines)
+    {
+        var parts = line.Split(',');
+        if (parts.Length == 7)
+        {
+            // Check if encrypted values are valid Base64 strings
+            if (IsValidBase64(parts[2]) && IsValidBase64(parts[3]) && IsValidBase64(parts[4]))
+            {
+
+                string decryptedTypename = Decrypt(parts[2]);
+                string decryptedPassword = Decrypt(parts[3]);
+                string decryptedDetails = Decrypt(parts[4]);
+
+                // Check if decrypted values are not empty before displaying
+                if (decryptedTypename != null && decryptedPassword != null && decryptedDetails != null)
+                {
+                    Console.WriteLine($"Type: {parts[1]}, name: {decryptedTypename}, Password: {decryptedPassword}, Details: {decryptedDetails}, Created: {parts[5]}, Last Updated: {parts[6]}");
+                
+                }
+                else
+                {
+                    Console.WriteLine("Error decrypting password. The decrypted values are empty.");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Error decrypting password. Invalid Base64 string detected in the encrypted values.");
+            }
+        }
+    }
+}
+
+private static void EditPasswordForUser()
+{
+     Console.WriteLine("Enter the system name you want to edit:");
+    string serviceName = Console.ReadLine();
+
+    // Find the password entry to edit
+    string[] lines = File.ReadAllLines(passwordManagerFile);
+    List<string> newPasswords = new List<string>();
+    bool found = false;
+
+    foreach (var line in lines)
+    {
+        var parts = line.Split(',');
+        if (Decrypt(parts[2]).Contains(serviceName) || Decrypt(parts[3]).Contains(serviceName))
+        {
+            Console.WriteLine("Enter the new password (leave empty to keep the existing password):");
+            string newPassword = ReadPassword();
+
+            if (!string.IsNullOrWhiteSpace(newPassword))
+            {
+                // If a new password is provided, encrypt it before storing
+                parts[3] = Encrypt(newPassword);
+            }
+
+            Console.WriteLine("Enter additional details (url/developer): (leave empty to keep the existing details):");
+            string newDetails = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(newDetails))
+            {
+                parts[4] = Encrypt(newDetails);
+            }
+
+            parts[6] = DateTime.Now.ToString(); // Update last updated date
+            found = true;
+        }
+
+        newPasswords.Add(string.Join(",", parts));
+    }
+
+    if (!found)
+    {
+        Console.WriteLine("Password not found.");
+    }
+    else
+    {
+        File.WriteAllLines(passwordManagerFile, newPasswords);
+        Console.WriteLine("Password updated successfully.");
+    }
+}
+
+private static void DeletePasswordForUser()
+{
+    Console.WriteLine("Enter the user name you want to delete:");
+    string serviceName = Console.ReadLine();
+
+    // Find and remove the password entry
+    string[] lines = File.ReadAllLines(passwordManagerFile);
+    List<string> newPasswords = new List<string>();
+    bool found = false;
+
+    foreach (var line in lines)
+    {
+        var parts = line.Split(',');
+        if (parts.Length == 7 && (Decrypt(parts[2]).Contains(serviceName) || Decrypt(parts[3]).Contains(serviceName)))
+        {
+            found = true;
+        }
+        else
+        {
+            newPasswords.Add(line);
+        }
+    }
+
+    if (!found)
+    {
+        Console.WriteLine("Password not found.");
+    }
+    else
+    {
+        File.WriteAllLines(passwordManagerFile, newPasswords);
+        Console.WriteLine("Password deleted successfully.");
     }
 }
 
